@@ -5,10 +5,12 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <string.h>
+#include <errno.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include <assert.h>
 
@@ -23,6 +25,15 @@
 #define KBUILD_CFLAGS ""
 #define KBUILD_STRING_BUILDER_INITIAL_SIZE 32
 #define KBUILD_STRING_BUILDER_SCALE_FACTOR 2
+#define KBUILD_DIR_MODE 0700
+#define KBUILD_DYNARR_INITIAL_SIZE 32
+#define KBUILD_DYNARR_SCALE_FACTOR 2
+
+#ifdef PATH_MAX
+#   define KBUILD_PATH_MAX PATH_MAX
+#else
+#   define KBUILD_PATH_MAX 256
+#endif
 
 #define KBUILD_ERRORF(code, format, ...) \
     do { \
@@ -74,6 +85,77 @@
         closedir(d); \
     } while(0)
 
+#define KBUILD_DYNARR(type) KbuildDynarr_##type
+
+#define KBUILD_DECLARE_DYNARR(type) \
+    typedef struct { \
+        type *buffer; \
+        int len; \
+        int cap; \
+    } KBUILD_DYNARR(type); \
+    \
+    KBUILD_DYNARR(type) *kbuild_create_dynarr_##type();
+
+#define KBUILD_DEFINE_DYNARR(type) \
+    KBUILD_DYNARR(type) *kbuild_create_dynarr_##type() { \
+        KBUILD_DYNARR(type) *arr = malloc(sizeof(KBUILD_DYNARR(type))); \
+        arr->buffer = malloc(sizeof(type) * KBUILD_DYNARR_INITIAL_SIZE); \
+        arr->cap = KBUILD_DYNARR_INITIAL_SIZE; \
+        arr->len = 0; \
+        return arr; \
+    }
+    
+#define KBUILD_CREATE_DYNARR(type) kbuild_create_dynarr_##type()
+    
+#define KBUILD_FREE_DYNARR(dynarr) \
+    do { \
+        assert(dynarr != NULL); \
+        assert(dynarr->buffer != NULL); \
+        free(dynarr->buffer); \
+        free(dynarr); \
+    } while (0)
+
+#define KBUILD_DYNARR_PUSH_BACK(dynarr, value) \
+    do { \
+        assert(dynarr != NULL); \
+        assert(dynarr->buffer != NULL); \
+        if ((dynarr->len + 1) > dynarr->cap) { \
+            int new_cap = dynarr->cap * KBUILD_DYNARR_SCALE_FACTOR; \
+            dynarr->buffer = realloc(dynarr->buffer, sizeof(*dynarr->buffer) * new_cap); \
+            dynarr->cap = new_cap; \
+        } \
+        dynarr->buffer[dynarr->len] = value; \
+        dynarr->len++; \
+    } while (0)
+
+#define KBUILD_DYNARR_APPEND(dynarr, other_dynarr) \
+    do { \
+        assert(dynarr != NULL); \
+        assert(dynarr->buffer != NULL); \
+        assert(other_dynarr != NULL); \
+        assert(other_dynarr->buffer != NULL); \
+        \
+        for (int i = 0; i < KBUILD_DYNARR_LEN(other_dynarr); i++) { \
+            KBUILD_DYNARR_PUSH_BACK(dynarr, KBUILD_DYNARR_AT(other_dynarr, i)); \
+        }\
+    } while (0)
+
+#define KBUILD_DYNARR_LEN(dynarr) ((dynarr)->len)
+
+#define KBUILD_DYNARR_AT(dynarr, idx) ((dynarr)->buffer[idx])
+
+#define KBUILD_DYNARR_SET(dynarr, idx, value) \
+    do { \
+        assert(idx >= 0 && "idx should be greater than zero"); \
+        assert(idx < dynarr->len && "idx should be less than the len of the array"); \
+        KBUILD_DYNARR_AT(dynarr, idx) = value; \
+    } while (0)
+
+typedef char* kbuild_str_t;
+
+KBUILD_DECLARE_DYNARR(int);
+KBUILD_DECLARE_DYNARR(kbuild_str_t);
+
 typedef struct {
     const char *name;
     char full_path[KBUILD_FILE_INFO_FULL_PATH_SIZE];
@@ -103,19 +185,22 @@ typedef struct {
     int cap;
 } KbuildStringBuilder;
 
-void kbuild_compile(const char* input_path, const char*output_path);
 int kbuild_is_dir(const char* path);
-void kbuild_compile_files_in_dir(const char* path, const char* build_path);
+int kbuild_mkdir(const char* path);
+
+char *kbuild_join_paths(const char** paths, int paths_len);
+char *kbuild_join_strs(const char** strs, int strs_len);
+
+void kbuild_compile(const char* input_path, const char*output_path);
+KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* path, const char* build_path);
 
 KbuildPathInfo *kbuild_pathinfo(const char* path);
 void kbuild_free_pathinfo(KbuildPathInfo  *pathinfo);
 
-KbuildStringBuilder* kbuild_create_string_builder();
+KbuildStringBuilder *kbuild_create_string_builder();
 void kbuild_string_builder_append(KbuildStringBuilder * builder, const char* str);
 void kbuild_string_builder_appendn(KbuildStringBuilder * builder, const char* str, int n);
 void kbuild_string_builder_append_ch(KbuildStringBuilder * builder, char ch);
-
-char *kbuild_join_paths(const char** paths, int paths_len);
 
 /**
   * Builds a char* from the internal buffer
@@ -137,6 +222,9 @@ void kbuild_free_string_builder(KbuildStringBuilder *string_buider);
 
 #ifdef KBUILD_H_IMPL
 
+KBUILD_DEFINE_DYNARR(int);
+KBUILD_DEFINE_DYNARR(kbuild_str_t);
+
 int kbuild_is_dir(const char* path) {
     struct stat path_stat;
     if (stat(path, &path_stat) != 0) {
@@ -144,6 +232,35 @@ int kbuild_is_dir(const char* path) {
     }
 
     return S_ISDIR(path_stat.st_mode);
+}
+
+int kbuild_mkdir(const char* path) {
+    char tmp[KBUILD_PATH_MAX];
+
+    char *pointer = NULL;
+
+    int len = snprintf(tmp, sizeof(tmp), "%s", path);
+    if (len < 0) {
+        return -1;
+    }
+
+    for (char *p = tmp; *p; p++) {
+        if (*p == KBUILD_DIRECTORY_SEPARATOR) {
+            *p = '\0';
+
+            if (mkdir(tmp, KBUILD_DIR_MODE) != 0 && errno != EEXIST) {
+                return -1;
+            } 
+
+            *p = KBUILD_DIRECTORY_SEPARATOR;
+        }
+    }
+
+    if (mkdir(tmp, KBUILD_DIR_MODE) != 0 && errno != EEXIST) {
+        return -1;
+    } 
+
+    return 0;
 }
 
 KbuildPathInfo* kbuild_pathinfo(const char* path) {
@@ -249,8 +366,13 @@ void kbuild_string_builder_appendn(KbuildStringBuilder * builder, const char* st
     assert(str != NULL);
 
     int other_len = strlen(str);
-    assert(other_len > 0);
-    assert(n > 0);
+    if (other_len <= 0) {
+        return;
+    }
+
+    if (n <= 0) {
+        return;
+    }
 
     int bytes_to_copy = n > other_len ? other_len : n;
 
@@ -376,7 +498,25 @@ char *kbuild_join_paths(const char** paths, int paths_len) {
     return full_path;
 }
 
-void kbuild_compile_files_in_dir(const char* input_path, const char* build_path) {
+char *kbuild_join_strs(const char** strs, int strs_len) {
+    KbuildStringBuilder *builder = kbuild_create_string_builder();
+    if (builder == NULL) {
+        return NULL;
+    }
+
+    for (int i = 0; i < strs_len; i++) {
+        kbuild_string_builder_append(builder, strs[i]);
+    }
+
+    char *joined = kbuild_string_builder_build(builder);
+
+    kbuild_free_string_builder(builder);
+
+    return joined;
+}
+
+KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* input_path, const char* build_path) {
+    KBUILD_DYNARR(kbuild_str_t) *output_paths = KBUILD_CREATE_DYNARR(kbuild_str_t);
     int build_path_len = strlen(build_path);
 
     // length of the build path + separator
@@ -388,7 +528,9 @@ void kbuild_compile_files_in_dir(const char* input_path, const char* build_path)
 
     KBUILD_FOREACH_FILE(input_path, {
         if (file_info.is_dir) {
-            kbuild_compile_files_in_dir(file_info.full_path, build_path);
+            KBUILD_DYNARR(kbuild_str_t) *children_objs = kbuild_compile_files_in_dir(file_info.full_path, build_path);
+            KBUILD_DYNARR_APPEND(output_paths, children_objs);
+            KBUILD_FREE_DYNARR(children_objs);
         } else {
             KbuildPathInfo *pathinfo = kbuild_pathinfo(file_info.full_path);
             if (pathinfo == NULL) {
@@ -398,42 +540,30 @@ void kbuild_compile_files_in_dir(const char* input_path, const char* build_path)
             const char *output_dir_paths_to_join[2];
             output_dir_paths_to_join[0] = build_path;
             output_dir_paths_to_join[1] = pathinfo->dirname;
-
             char *output_full_dir_path = kbuild_join_paths(output_dir_paths_to_join, 2);
             
-            // TODO: Implement a proper mkdir
-            char cmd[1024] = "";
-            sprintf(cmd, "mkdir %s -p", output_full_dir_path);
-            system(cmd);
+            kbuild_mkdir(output_full_dir_path);
 
-            // TODO: A general joins for non path string
-            KbuildStringBuilder *basename_builder = kbuild_create_string_builder();
-            kbuild_string_builder_append(basename_builder, pathinfo->filename);
-            kbuild_string_builder_append(basename_builder, KBUILD_OBJECT_FILE_EXTENSION);
-
-            char *output_basename = kbuild_string_builder_build(basename_builder);
+            const char *output_basename_parts[2];
+            output_basename_parts[0] = pathinfo->filename;
+            output_basename_parts[1] = KBUILD_OBJECT_FILE_EXTENSION;
+            char *output_basename = kbuild_join_strs(output_basename_parts, 2);
             
-            free(basename_builder);
-            basename_builder = NULL;
-
-            // TODO: Make this a little nicer to use
-            const char *output_file_paths_to_join[2];
-            output_file_paths_to_join[0] = output_full_dir_path;
-            output_file_paths_to_join[1] = output_basename;
-
-            char *output_full_file_path = kbuild_join_paths(output_file_paths_to_join, 2);
-
-            free(output_full_dir_path);
-            output_full_dir_path = NULL;
-
-            free(output_basename);
-            output_basename = NULL;
+            const char *output_file_paths_parts[2];
+            output_file_paths_parts[0] = output_full_dir_path;
+            output_file_paths_parts[1] = output_basename;
+            char *output_full_file_path = kbuild_join_paths(output_file_paths_parts, 2);
 
             kbuild_compile(file_info.full_path, output_full_file_path);
+            KBUILD_DYNARR_PUSH_BACK(output_paths, output_full_file_path);
 
             kbuild_free_pathinfo(pathinfo);
+            free(output_basename);
+            free(output_full_dir_path);
         }
     });
+
+    return output_paths;
 }
 
 void kbuild_compile(const char* input_path, const char*output_path) {

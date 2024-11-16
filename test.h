@@ -4,7 +4,7 @@
 typedef enum {
     KTEST_RESULT_OK = 0,
     KTEST_RESULT_FAILED = 1,
-} KTestResult;
+} KtestResult;
 
 #define KTEST_FAILF(message, ...) \
     do { \

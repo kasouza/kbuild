@@ -6,7 +6,7 @@
 #define TEST_FOREACH_MAX_FILE_NAME_SIZE 1024
 #define TEST_FOREACH_EXPECTED_FILE_COUNT 5
 
-KTestResult test_foreach_file() {
+KtestResult test_foreach_file() {
     const char *expected_files[TEST_FOREACH_EXPECTED_FILE_COUNT] = {
         "tests/fake-file-structure/abc",
         "tests/fake-file-structure/def",
@@ -40,7 +40,7 @@ KTestResult test_foreach_file() {
     return KTEST_RESULT_OK;
 }
 
-KTestResult test_string_builder() {
+KtestResult test_string_builder() {
     KbuildStringBuilder *builder = kbuild_create_string_builder();
 
     const char* expected_str = "saske\tnarutosakurãdasjkldjaskd\n\nllllkliveryloongworkkkkkkkkdddasdsax";
@@ -144,7 +144,7 @@ KTestResult test_string_builder() {
     return KTEST_RESULT_OK;
 }
 
-KTestResult test_pathinfo() {
+KtestResult test_pathinfo() {
     KbuildPathInfo *pathinfo = kbuild_pathinfo("/saske/narutos/sakuras/file.old.zip");
 
     KTEST_ASSERT_EQ_STR(pathinfo->extension, "zip", "Should return the correct extension");
@@ -176,7 +176,7 @@ KTestResult test_pathinfo() {
     KTEST_ASSERT_EQ(pathinfo_empty, NULL, "Should return a NULL pointer if the path is empty");
 }
 
-KTestResult test_join_paths() {
+KtestResult test_join_paths() {
     const char *paths[] = {"/saske/", "naruto/", "", "/fernando", "maria/"};
     char *path = kbuild_join_paths(paths, 5);
     KTEST_ASSERT_EQ_STR(path, "/saske/naruto/fernando/maria", "Should properly join the paths");
@@ -237,11 +237,86 @@ KTestResult test_join_paths() {
     free(path10);
 }
 
+KtestResult test_join_strs() {
+    const char *strs[] = { "abc", "def", "ghi\n", "what\tever" };
+    char *joined = kbuild_join_strs(strs, 4);
+    KTEST_ASSERT_EQ_STR(joined, "abcdefghi\nwhat\tever", "Should properly join the strings");
+    free(joined);
+
+    const char *strs2[] = { "", "def", "ghi\n", "what\tever" };
+    char *joined2 = kbuild_join_strs(strs2, 4);
+    KTEST_ASSERT_EQ_STR(joined2, "defghi\nwhat\tever", "Should properly join the strings");
+    free(joined2);
+
+    const char *strs3[] = { "", "", "" };
+    char *joined3 = kbuild_join_strs(strs3, 3);
+    KTEST_ASSERT_EQ_STR(joined3, "", "Should properly join the strings");
+    free(joined3);
+
+    const char *strs4[] = { "" };
+    char *joined4 = kbuild_join_strs(strs4, 1);
+    KTEST_ASSERT_EQ_STR(joined4, "", "Should properly join the strings");
+    free(joined4);
+}
+
+KtestResult test_dyn_array() {
+    KBUILD_DYNARR(int) *arr = KBUILD_CREATE_DYNARR(int);
+
+    for (int i = 0; i < 128; i++) {
+        KBUILD_DYNARR_PUSH_BACK(arr, i * i);
+    }
+
+    for (int i = 0; i < 128; i++) {
+        KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr, i), i * i, "Should get the correct value from the array");
+    }
+
+    for (int i = 0; i < 128; i++) {
+        KBUILD_DYNARR_SET(arr, i, i - 3);
+    }
+
+    for (int i = 0; i < 128; i++) {
+        KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr, i), i - 3, "Should get the correct value from the array");
+    }
+
+    KBUILD_FREE_DYNARR(arr);
+
+    // Test dynnar append
+    KBUILD_DYNARR(int) * arr2 = KBUILD_CREATE_DYNARR(int);
+    KBUILD_DYNARR(int) * arr3 = KBUILD_CREATE_DYNARR(int);
+    
+    KBUILD_DYNARR_PUSH_BACK(arr2, 1);
+    KBUILD_DYNARR_PUSH_BACK(arr2, 2);
+    KBUILD_DYNARR_PUSH_BACK(arr2, 3);
+
+    KBUILD_DYNARR_PUSH_BACK(arr3, 4);
+    KBUILD_DYNARR_PUSH_BACK(arr3, 5);
+    KBUILD_DYNARR_PUSH_BACK(arr3, 6);
+
+    KBUILD_DYNARR_APPEND(arr2, arr3);
+
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_LEN(arr2), 6, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 0), 1, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 1), 2, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 2), 3, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 3), 4, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 4), 5, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 5), 6, "Should have properly merged the two arrays");
+
+    KBUILD_DYNARR(int) * arr_empty = KBUILD_CREATE_DYNARR(int);
+    KBUILD_DYNARR_APPEND(arr2, arr_empty);
+    KTEST_ASSERT_EQ(KBUILD_DYNARR_LEN(arr2), 6, "Appending an empty array should not change the original");
+
+    KBUILD_FREE_DYNARR(arr2);
+    KBUILD_FREE_DYNARR(arr3);
+}
+
 int main() {
     KTEST(test_foreach_file);
     KTEST(test_string_builder);
     KTEST(test_pathinfo);
     KTEST(test_join_paths);
+    KTEST(test_join_strs);
+    KTEST(test_dyn_array);
 
     return 0;
 }
