@@ -189,10 +189,13 @@ int kbuild_is_dir(const char* path);
 int kbuild_mkdir(const char* path);
 
 char *kbuild_join_paths(const char** paths, int paths_len);
-char *kbuild_join_strs(const char** strs, int strs_len);
+char *kbuild_join(const char** strs, int strs_len);
+char *kbuild_join_separator(const char** strs, int strs_len, const char *ch);
+
 
 void kbuild_compile(const char* input_path, const char*output_path);
-KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* path, const char* build_path);
+KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* path, const char *build_path);
+void kbuild_link_files(KBUILD_DYNARR(kbuild_str_t) *object_files, const char *output_file_path);
 
 KbuildPathInfo *kbuild_pathinfo(const char* path);
 void kbuild_free_pathinfo(KbuildPathInfo  *pathinfo);
@@ -498,13 +501,26 @@ char *kbuild_join_paths(const char** paths, int paths_len) {
     return full_path;
 }
 
-char *kbuild_join_strs(const char** strs, int strs_len) {
+char *kbuild_join(const char **strs, int strs_len) {
+    return kbuild_join_separator(strs, strs_len, "");
+}
+
+char *kbuild_join_separator(const char **strs, int strs_len, const char *separator) {
+    assert(strs != NULL);
+    assert(separator != NULL);
+
     KbuildStringBuilder *builder = kbuild_create_string_builder();
     if (builder == NULL) {
         return NULL;
     }
 
+    int separator_len = strlen(separator);
+
     for (int i = 0; i < strs_len; i++) {
+        if (separator_len > 0 && i > 0) {
+            kbuild_string_builder_append(builder, separator);
+        }
+
         kbuild_string_builder_append(builder, strs[i]);
     }
 
@@ -513,6 +529,15 @@ char *kbuild_join_strs(const char** strs, int strs_len) {
     kbuild_free_string_builder(builder);
 
     return joined;
+}
+
+void kbuild_compile(const char* input_path, const char*output_path) {
+    char cmd[KBUILD_MAX_COMMAND_SIZE];
+    snprintf(cmd, KBUILD_MAX_COMMAND_SIZE, "%s -c -o %s %s %s", KBUILD_CC, output_path, input_path, KBUILD_CFLAGS);
+       
+    if (system(cmd) != 0) {
+        KBUILD_ERRORF(KBUILD_ERROR_COMPILING, "Could not compile %s\n", input_path);
+    }
 }
 
 KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* input_path, const char* build_path) {
@@ -547,7 +572,7 @@ KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* input_path,
             const char *output_basename_parts[2];
             output_basename_parts[0] = pathinfo->filename;
             output_basename_parts[1] = KBUILD_OBJECT_FILE_EXTENSION;
-            char *output_basename = kbuild_join_strs(output_basename_parts, 2);
+            char *output_basename = kbuild_join(output_basename_parts, 2);
             
             const char *output_file_paths_parts[2];
             output_file_paths_parts[0] = output_full_dir_path;
@@ -566,13 +591,8 @@ KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* input_path,
     return output_paths;
 }
 
-void kbuild_compile(const char* input_path, const char*output_path) {
-    char cmd[KBUILD_MAX_COMMAND_SIZE];
-    snprintf(cmd, KBUILD_MAX_COMMAND_SIZE, "%s -c -o %s %s %s", KBUILD_CC, output_path, input_path, KBUILD_CFLAGS);
-       
-    if (system(cmd) != 0) {
-        KBUILD_ERRORF(KBUILD_ERROR_COMPILING, "Could not compile %s\n", input_path);
-    }
+void kbuild_link_files(KBUILD_DYNARR(kbuild_str_t) *object_files, const char *output_file_path) {
+
 }
 
 #endif

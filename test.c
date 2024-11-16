@@ -237,26 +237,51 @@ KtestResult test_join_paths() {
     free(path10);
 }
 
-KtestResult test_join_strs() {
+KtestResult test_join() {
     const char *strs[] = { "abc", "def", "ghi\n", "what\tever" };
-    char *joined = kbuild_join_strs(strs, 4);
+    char *joined = kbuild_join(strs, 4);
     KTEST_ASSERT_EQ_STR(joined, "abcdefghi\nwhat\tever", "Should properly join the strings");
     free(joined);
 
     const char *strs2[] = { "", "def", "ghi\n", "what\tever" };
-    char *joined2 = kbuild_join_strs(strs2, 4);
+    char *joined2 = kbuild_join(strs2, 4);
     KTEST_ASSERT_EQ_STR(joined2, "defghi\nwhat\tever", "Should properly join the strings");
     free(joined2);
 
     const char *strs3[] = { "", "", "" };
-    char *joined3 = kbuild_join_strs(strs3, 3);
+    char *joined3 = kbuild_join(strs3, 3);
     KTEST_ASSERT_EQ_STR(joined3, "", "Should properly join the strings");
     free(joined3);
 
     const char *strs4[] = { "" };
-    char *joined4 = kbuild_join_strs(strs4, 1);
+    char *joined4 = kbuild_join(strs4, 1);
     KTEST_ASSERT_EQ_STR(joined4, "", "Should properly join the strings");
     free(joined4);
+
+    const char *strs5[] = { "abc", "def", "ghi\n", "what\tever" };
+    char *joined5 = kbuild_join_separator(strs5, 4, "--");
+    KTEST_ASSERT_EQ_STR(joined5, "abc--def--ghi\n--what\tever", "Should properly join the strings, using separators");
+    free(joined5);
+
+    const char *strs6[] = { "", "def", "ghi\n", "what\tever" };
+    char *joined6 = kbuild_join_separator(strs6, 4, "");
+    KTEST_ASSERT_EQ_STR(joined6, "defghi\nwhat\tever", "Should properly join the strings");
+    free(joined6);
+
+    const char *strs7[] = { "", "", "" };
+    char *joined7 = kbuild_join_separator(strs7, 3, " X ");
+    KTEST_ASSERT_EQ_STR(joined7, " X  X ", "Should properly join the strings");
+    free(joined7);
+
+    const char *strs8[] = { "" };
+    char *joined8 = kbuild_join_separator(strs8, 1, "daskdasjdlkasjlks");
+    KTEST_ASSERT_EQ_STR(joined8, "", "Should properly join the strings");
+    free(joined8);
+
+    const char *strs9[] = { "", "def", "ghi\n", "what\tever" };
+    char *joined9 = kbuild_join_separator(strs9, 4, "\\");
+    KTEST_ASSERT_EQ_STR(joined9, "\\def\\ghi\n\\what\tever", "Should properly join the strings");
+    free(joined9);
 }
 
 KtestResult test_dyn_array() {
@@ -315,7 +340,7 @@ int main() {
     KTEST(test_string_builder);
     KTEST(test_pathinfo);
     KTEST(test_join_paths);
-    KTEST(test_join_strs);
+    KTEST(test_join);
     KTEST(test_dyn_array);
 
     return 0;
