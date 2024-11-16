@@ -14,7 +14,9 @@
 
 #include <assert.h>
 
-#define KBUILD_OBJECT_FILE_EXTENSION ".o"
+#define KBUILD_OBJECT_FILE_EXTENSION "o"
+#define KBUILD_OBJECT_FILE_EXTENSION_WITH_DOT "."KBUILD_OBJECT_FILE_EXTENSION
+#define KBUILD_SOURCE_FILE_EXTENSION "c"
 #define KBUILD_DIRECTORY_SEPARATOR '/'
 #define KBUILD_EXTENSION_SEPARATOR '.'
 #define KBUILD_FILE_INFO_FULL_PATH_SIZE 1024
@@ -23,6 +25,7 @@
 #define KBUILD_MAX_EXTENSION_SIZE 32
 #define KBUILD_CC "cc"
 #define KBUILD_CFLAGS ""
+#define KBUILD_LDFLAGS ""
 #define KBUILD_STRING_BUILDER_INITIAL_SIZE 32
 #define KBUILD_STRING_BUILDER_SCALE_FACTOR 2
 #define KBUILD_DIR_MODE 0700
@@ -135,8 +138,8 @@
         assert(other_dynarr != NULL); \
         assert(other_dynarr->buffer != NULL); \
         \
-        for (int i = 0; i < KBUILD_DYNARR_LEN(other_dynarr); i++) { \
-            KBUILD_DYNARR_PUSH_BACK(dynarr, KBUILD_DYNARR_AT(other_dynarr, i)); \
+        for (int i = 0; i < other_dynarr->len; i++) { \
+            KBUILD_DYNARR_PUSH_BACK(dynarr, other_dynarr->buffer[i]); \
         }\
     } while (0)
 
@@ -169,7 +172,8 @@ typedef enum {
     KBUILD_ERROR_OUTPUT_FILE_PATH_TOO_BIG = 4,
     KBUILD_ERROR_EXTENSION_SIZE_TOO_BIG = 5,
     KBUILD_ERROR_INVALID_EXTENSION = 6,
-    KBUILDER_ERROR_INVALID_PATH = 7
+    KBUILDER_ERROR_INVALID_PATH = 7,
+    KBUILD_ERROR_LINKING = 8
 } KbuildError;
 
 typedef struct {
@@ -562,29 +566,32 @@ KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* input_path,
                 KBUILD_ERRORF(KBUILDER_ERROR_INVALID_PATH, "%s\n", file_info.full_path);
             }
 
-            const char *output_dir_paths_to_join[2];
-            output_dir_paths_to_join[0] = build_path;
-            output_dir_paths_to_join[1] = pathinfo->dirname;
-            char *output_full_dir_path = kbuild_join_paths(output_dir_paths_to_join, 2);
-            
-            kbuild_mkdir(output_full_dir_path);
+            if (strcmp(pathinfo->extension, KBUILD_SOURCE_FILE_EXTENSION) == 0) {
+                const char *output_dir_paths_to_join[2];
+                output_dir_paths_to_join[0] = build_path;
+                output_dir_paths_to_join[1] = pathinfo->dirname;
+                char *output_full_dir_path = kbuild_join_paths(output_dir_paths_to_join, 2);
+                
+                kbuild_mkdir(output_full_dir_path);
 
-            const char *output_basename_parts[2];
-            output_basename_parts[0] = pathinfo->filename;
-            output_basename_parts[1] = KBUILD_OBJECT_FILE_EXTENSION;
-            char *output_basename = kbuild_join(output_basename_parts, 2);
-            
-            const char *output_file_paths_parts[2];
-            output_file_paths_parts[0] = output_full_dir_path;
-            output_file_paths_parts[1] = output_basename;
-            char *output_full_file_path = kbuild_join_paths(output_file_paths_parts, 2);
+                const char *output_basename_parts[2];
+                output_basename_parts[0] = pathinfo->filename;
+                output_basename_parts[1] = KBUILD_OBJECT_FILE_EXTENSION_WITH_DOT;
+                char *output_basename = kbuild_join(output_basename_parts, 2);
+                
+                const char *output_file_paths_parts[2];
+                output_file_paths_parts[0] = output_full_dir_path;
+                output_file_paths_parts[1] = output_basename;
+                char *output_full_file_path = kbuild_join_paths(output_file_paths_parts, 2);
 
-            kbuild_compile(file_info.full_path, output_full_file_path);
-            KBUILD_DYNARR_PUSH_BACK(output_paths, output_full_file_path);
+                kbuild_compile(file_info.full_path, output_full_file_path);
+                KBUILD_DYNARR_PUSH_BACK(output_paths, output_full_file_path);
+
+                free(output_basename);
+                free(output_full_dir_path);
+            }
 
             kbuild_free_pathinfo(pathinfo);
-            free(output_basename);
-            free(output_full_dir_path);
         }
     });
 
@@ -592,7 +599,28 @@ KBUILD_DYNARR(kbuild_str_t) *kbuild_compile_files_in_dir(const char* input_path,
 }
 
 void kbuild_link_files(KBUILD_DYNARR(kbuild_str_t) *object_files, const char *output_file_path) {
+    KBUILD_DYNARR(kbuild_str_t) *command_parts = KBUILD_CREATE_DYNARR(kbuild_str_t);
 
+    KBUILD_DYNARR_PUSH_BACK(command_parts, KBUILD_CC);
+    KBUILD_DYNARR_PUSH_BACK(command_parts, KBUILD_CFLAGS);
+    KBUILD_DYNARR_PUSH_BACK(command_parts, KBUILD_LDFLAGS);
+
+    KBUILD_DYNARR_PUSH_BACK(command_parts, "-o");
+
+    // output_file_path won't be modified, its safe to just cast the pointer
+    KBUILD_DYNARR_PUSH_BACK(command_parts, (char*)output_file_path);
+
+    KBUILD_DYNARR_APPEND(command_parts, object_files);
+
+    char *cmd = kbuild_join_separator((const char**)command_parts->buffer, command_parts->len, " ");
+
+    int status = system(cmd);
+    if (status != 0) {
+        KBUILD_ERROR(KBUILD_ERROR_LINKING);
+    }
+
+    free(cmd);
+    KBUILD_FREE_DYNARR(command_parts);
 }
 
 #endif

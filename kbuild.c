@@ -3,9 +3,13 @@
 
 int main(int argc, char** argv) {
     KBUILD_DYNARR(kbuild_str_t) *object_files = kbuild_compile_files_in_dir("test-src", "build");
-    for (int i = 0; i < KBUILD_DYNARR_LEN(object_files); i++) {
-        printf("%s\n", KBUILD_DYNARR_AT(object_files, i));
+    kbuild_link_files(object_files, "build/saske");
+
+    for (int i = 0; i < object_files->len; i++) {
+        free(object_files->buffer[i]);
     }
+
+    KBUILD_FREE_DYNARR(object_files);
 
     return 0;
 }
