@@ -292,15 +292,15 @@ KtestResult test_dyn_array() {
     }
 
     for (int i = 0; i < 128; i++) {
-        KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr, i), i * i, "Should get the correct value from the array");
+        KTEST_ASSERT_EQ(arr->buffer[i], i * i, "Should get the correct value from the array");
     }
 
     for (int i = 0; i < 128; i++) {
-        KBUILD_DYNARR_SET(arr, i, i - 3);
+       arr->buffer[i] =  i - 3;
     }
 
     for (int i = 0; i < 128; i++) {
-        KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr, i), i - 3, "Should get the correct value from the array");
+        KTEST_ASSERT_EQ(arr->buffer[i], i - 3, "Should get the correct value from the array");
     }
 
     KBUILD_FREE_DYNARR(arr);
@@ -319,17 +319,17 @@ KtestResult test_dyn_array() {
 
     KBUILD_DYNARR_APPEND(arr2, arr3);
 
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_LEN(arr2), 6, "Should have properly merged the two arrays");
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 0), 1, "Should have properly merged the two arrays");
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 1), 2, "Should have properly merged the two arrays");
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 2), 3, "Should have properly merged the two arrays");
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 3), 4, "Should have properly merged the two arrays");
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 4), 5, "Should have properly merged the two arrays");
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_AT(arr2, 5), 6, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(arr2->len, 6, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(arr2->buffer[0], 1, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(arr2->buffer[1], 2, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(arr2->buffer[2], 3, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(arr2->buffer[3], 4, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(arr2->buffer[4], 5, "Should have properly merged the two arrays");
+    KTEST_ASSERT_EQ(arr2->buffer[5], 6, "Should have properly merged the two arrays");
 
     KBUILD_DYNARR(int) * arr_empty = KBUILD_CREATE_DYNARR(int);
     KBUILD_DYNARR_APPEND(arr2, arr_empty);
-    KTEST_ASSERT_EQ(KBUILD_DYNARR_LEN(arr2), 6, "Appending an empty array should not change the original");
+    KTEST_ASSERT_EQ(arr2->len, 6, "Appending an empty array should not change the original");
 
     KBUILD_FREE_DYNARR(arr2);
     KBUILD_FREE_DYNARR(arr3);

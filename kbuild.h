@@ -143,17 +143,6 @@
         }\
     } while (0)
 
-#define KBUILD_DYNARR_LEN(dynarr) ((dynarr)->len)
-
-#define KBUILD_DYNARR_AT(dynarr, idx) ((dynarr)->buffer[idx])
-
-#define KBUILD_DYNARR_SET(dynarr, idx, value) \
-    do { \
-        assert(idx >= 0 && "idx should be greater than zero"); \
-        assert(idx < dynarr->len && "idx should be less than the len of the array"); \
-        KBUILD_DYNARR_AT(dynarr, idx) = value; \
-    } while (0)
-
 typedef char* kbuild_str_t;
 
 KBUILD_DECLARE_DYNARR(int);
